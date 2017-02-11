@@ -1,0 +1,354 @@
+---
+title: "Data Mining Unsupervised Learning - K-Means"
+---
+
+The dataset is from a ficticious insurance company. The goal of this project is to do all the data cleaning needed to apply k-means. 
+
+
+We'll start by reading the excel file into a dataframe. 
+```{r}
+library(readxl)
+df <- read_excel("K-Means + Data Cleansing.xlsx")
+```
+
+### Exploratory Data Analysis - Univariate Analysis
+
+```{r}
+summary(df[,-1])
+```
+
+Checking the boxplots of the different variables. The outliers are obvious. 
+
+```{r}
+library(ggplot2)
+ggplot(stack(df[,c(9:13)]), aes(x = ind, y = values)) + geom_boxplot()
+ggplot(stack(df[,4]), aes(x = ind, y = values)) + geom_boxplot()
+ggplot(stack(df[,7]), aes(x = ind, y = values)) + geom_boxplot()
+ggplot(stack(df[,8]), aes(x = ind, y = values)) + geom_boxplot()
+```
+
+Transforming CHAR column to factor
+```{r}
+str(df)
+df$ED <- as.factor(df$ED)
+```
+
+
+
+## Outliers
+
+Since this dataset has a relatively few number of variables, we can check the outliers on each variable one by one for better precision. If it was a bigger dataset, an automatic method should be used.
+Also, checking the histogram after the outlier removal. 
+
+
+### Age Outlier
+
+The age outlier is (probably) the only artifical outlier on this dataset. Changing it to a missing value so it can be imputed as the others. 
+
+```{r}
+age_idx <- match(988,df$Age)
+df[age_idx,2] <- NA
+```
+
+
+### Salary Outliers
+
+Checking the highest values on Salary. Hand-pick the ones that seem off, and move them to a separate dataframe for outliers. 
+
+```{r}
+sortedsalary <- sort(df$Salary, decreasing = TRUE)
+head(sortedsalary, 40)
+
+#Creating outliers table and moving the outliers there
+salary_idx <- match(c(sortedsalary[1:2]),df$Salary)
+outliers <- df[c(salary_idx),]
+
+#Removing the outliers from the original dataframe.
+df <- df[-c(salary_idx),] 
+
+#Plotting the histogram of the variable without outliers
+hist(df$Salary)
+```
+
+### Premium Motors Outlier
+
+```{r}
+sortedp_motor <- sort(df$P_Motor, decreasing = TRUE)
+head(sortedp_motor, 40)
+
+pmotor_idx <- match(c(sortedp_motor[1:6]),df$P_Motor)
+outliers <- rbind(outliers, df[c(pmotor_idx),])
+
+df <- df[-c(pmotor_idx),]
+hist(df$P_Motor)
+```
+
+### Premium House Outliers
+
+```{r}
+sortedp_house <- sort(df$P_House, decreasing = TRUE)
+head(sortedp_house, 60)
+
+phouse_idx <- match(c(sortedp_house[1:50]),df$P_House)
+outliers <- rbind(outliers, df[c(phouse_idx),])
+
+df <- df[-c(phouse_idx),]
+hist(df$P_House)
+```
+
+
+### Premium Health Outliers
+
+
+```{r}
+sortedp_health <- sort(df$P_Health, decreasing = TRUE)
+head(sortedp_health, 40)
+
+phealth_idx <- match(c(sortedp_health[1:2]),df$P_Health)
+outliers <- rbind(outliers, df[c(phealth_idx),])
+
+df <- df[-c(phealth_idx),]
+hist(df$P_Health)
+```
+
+### Premium Work Outliers
+
+
+```{r}
+sortedp_work <- sort(df$P_Work, decreasing = TRUE)
+head(sortedp_work, 50)
+
+pwork_idx <- match(c(sortedp_work[1:17]),df$P_Work)
+outliers <- rbind(outliers, df[c(pwork_idx),])
+
+df <- df[-c(pwork_idx),]
+hist(df$P_Work)
+```
+
+### Premium Life Outliers
+
+
+```{r}
+sortedp_life <- sort(df$P_Life, decreasing = TRUE)
+head(sortedp_life, 50)
+
+plife_idx <- match(c(sortedp_life[1:17]),df$P_Life)
+outliers <- rbind(outliers, df[c(plife_idx),])
+
+df <- df[-c(plife_idx),]
+hist(df$P_Life)
+```
+
+
+### Claim Rate
+
+
+```{r}
+sortedp_claim <- sort(df$Claim_Rate, decreasing = TRUE)
+head(sortedp_claim, 40)
+
+pclaim_idx <- match(c(sortedp_claim[1:15]),df$Claim_Rate)
+outliers <- rbind(outliers, df[c(pclaim_idx),])
+
+df <- df[-c(pclaim_idx),]
+hist(df$Claim_Rate)
+```
+
+### Customer Monetary Value
+
+```{r}
+sortedp_cmv <- sort(df$CMV, decreasing = TRUE)
+head(sortedp_cmv, 40)
+
+cmv_idx <- match(c(sortedp_cmv[1:8]),df$CMV)
+outliers <- rbind(outliers, df[c(cmv_idx),])
+
+df <- df[-c(cmv_idx),]
+```
+Summary Statistics after outlier removal
+
+```{r}
+summary(df)
+```
+
+
+### Missing Values
+
+Checking and plotting the missing values
+
+```{r}
+
+sapply(df, function(x) sum(is.na(x)))
+
+library(VIM)
+mice_plot <- aggr(df, col=c('navyblue','grey'),
+                    numbers=TRUE, sortVars=TRUE,
+                    labels=names(df), cex.axis=.7,
+                    gap=3, ylab=c("Missing data","Pattern"))
+```
+Imputing the Missing Values using predictive mean matching. 
+
+```{r}
+library(Hmisc)
+imp_df <- df
+impute_arg <- aregImpute(~ED + Age + Salary + Children + P_Motor + P_Health + P_Life + P_Work , data = imp_df, n.impute = 5)
+```
+
+Imputing the missing values into a new dataframe.
+
+```{r}
+# Get the imputed values
+imputed <-impute.transcan(impute_arg, data=imp_df, imputation=1, list.out=TRUE, pr=FALSE, check=FALSE)
+
+df.imputed <- as.data.frame(do.call(cbind.data.frame,imputed))
+
+imp_df[names(df.imputed)] <- df.imputed
+```
+
+GLA was not imputed, but since it's only 1 missing value, we can easily replace it by the mean
+```{r}
+imp_df$GLA[which (is.na(imp_df$GLA))] <- 3
+
+#Checking missing values
+sapply(imp_df, function(x) sum(is.na(x)))
+```
+
+
+# Transforming "imputed" class columns to numeric again
+```{r}
+cols <- c(2,4,6,9,11,12,13)    
+imp_df[,cols] <- apply(imp_df[,cols], 2, function(x) as.numeric(as.character(x)))    
+
+str(imp_df)
+```
+
+
+
+Dataset Summary and plots after outlier removal and missing values imputation
+
+```{r}
+summary(imp_df)
+```
+
+
+```{r}
+ggplot(stack(imp_df[,c(9:13)]), aes(x = ind, y = values)) + geom_boxplot()
+ggplot(stack(imp_df[,4]), aes(x = ind, y = values)) + geom_boxplot()
+ggplot(stack(imp_df[,7]), aes(x = ind, y = values)) + geom_boxplot()
+ggplot(stack(imp_df[,8]), aes(x = ind, y = values)) + geom_boxplot()
+```
+
+## Bi-Variate Analysis
+
+```{r}
+cor.mat <- round(cor(imp_df[,-c(1,3,5,6)]),2)
+cor.mat
+
+library("corrplot")
+corrplot(cor.mat, type="lower", tl.col="black", tl.srt=45)
+```
+
+##Variable Transformation
+
+Creating Effort Rate (All Products / Salary)
+
+```{r}
+
+imp_df$TE <- (imp_df$P_Health + imp_df$P_House + imp_df$P_Life + imp_df$P_Motor + imp_df$P_Work) / imp_df$Salary
+describe(imp_df$TE)
+```
+
+Binning Age using the Percentile approach. If we take a look at Age distribution. 25% of our clients have below 33 years - 50% is between 33 and 63 and the remaining 25% is greater than 63. We will use these breakpoints to bin the users into different age groups and create a new varible "Age Group" to use instead of "Age".
+
+```{r}
+describe(imp_df$Age)
+```
+0 - Below 33 years | 1 - Between 33 years and 48 years | 2 - Between 48 and 63 years | 3 - Above 63 years old
+
+```{r}
+imp_df$Age_Group <- findInterval(imp_df$Age, c(33, 48, 63))
+describe(imp_df$Age_Group)
+```
+# Clustering
+
+Divided the dataset for two clustering applications. One for Product Clustering and another Client Clustering. Product clustering contains only the product variables and the Client clustering contains only the client variables. 
+
+
+## Clustering for Product Variables
+
+Defining Product Variables
+```{r}
+productv <- imp_df[,9:13]
+```
+
+
+Elbow method with Within group Sum of Squares - 5 Clusters
+
+```{r}
+library(factoextra)
+fviz_nbclust(productv, kmeans, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)
+```
+
+NbClust for confirmation on number of clusters
+
+```{r}
+library(NbClust)
+nb <- NbClust(productv, distance = "euclidean", min.nc = 4,
+        max.nc = 6, method = "ward.D2", index ="all")
+
+fviz_nbclust(nb) + theme_minimal()
+```
+
+
+Applying K-Means 
+
+Default algorithm: Hartigan-Wong. Need to change to Lloyd so it's able to run. Ended up using 3 clusters due subjective considerations in the posterior data analysis. 
+
+```{r}
+km.res.prod <- eclust(productv, "kmeans", k = 3,
+                 nstart = 25, graph = FALSE, algorithm="Lloyd", iter.max=150)
+```
+
+
+
+
+### Clustering for Client Variables
+
+Defining client variables
+```{r}
+clientv <- imp_df[,c(4,7,8,14)]
+```
+
+
+Using the elbow method with Within group Sum of Squares to define number of clusters.
+
+```{r}
+fviz_nbclust(clientv, kmeans, method = "wss") +
+    geom_vline(xintercept = 4, linetype = 2)
+```
+
+NbClust for confirmation on number of clusters
+
+```{r}
+nb <- NbClust(clientv, distance = "euclidean", min.nc = 4,
+       max.nc = 6, method = "ward.D2", index ="all")
+
+fviz_nbclust(nb) + theme_minimal()
+```
+
+
+Applying K-Means
+
+Ended up using 4 clusters due to subjective considerations in the posterior data analysis. 
+
+```{r}
+km.res.client <- eclust(clientv, "kmeans", k = 4,
+                 nstart = 25, graph = FALSE, iter.max=150)
+```
+
+
+
+
+
+
